@@ -234,10 +234,9 @@ class FirebaseService {
             .snapshots()
             .map((snap) => snap.docs.map((d) => Product.fromJson(d.data())).toList());
       }
-      return _companyCol(companyId, 'products').snapshots().asyncMap((snap) async {
-        if (snap.docs.isNotEmpty) return snap.docs.map((d) => Product.fromJson(d.data())).toList();
-        final top = await FirebaseFirestore.instance.collection('products').get();
-        return top.docs.map((d) => Product.fromJson(d.data())).toList();
+      // Only return company-specific products, don't fall back to top-level
+      return _companyCol(companyId, 'products').snapshots().map((snap) {
+        return snap.docs.map((d) => Product.fromJson(d.data())).toList();
       });
     });
   }

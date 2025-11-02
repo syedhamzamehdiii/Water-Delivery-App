@@ -1503,30 +1503,35 @@ class AppState extends ChangeNotifier {
     final route = _routes[routeId];
     if (route != null) {
       // Unassign customers from this route's areas and delete their auto orders
-      await _unassignCustomersFromRoute(route.areas, route.assignedDriver);
+      // Pass route days directly to avoid inefficient lookup
+      await _unassignCustomersFromRoute(route.areas, route.assignedDriver, route.days);
     }
     
     await FirebaseService.deleteRoute(routeId);
   }
 
   // Method to unassign customers from a deleted route's areas (day-specific)
-  Future<void> _unassignCustomersFromRoute(List<String> areas, String? driverName) async {
+  Future<void> _unassignCustomersFromRoute(List<String> areas, String? driverName, List<String> routeDays) async {
     try {
-      
-      // Find the route to get its days
-      final route = _routes.values.firstWhere(
-        (r) => r.assignedDriver == driverName && 
-               r.areas.any((area) => areas.contains(area)),
-        orElse: () => RoutePlan(days: [], areas: [], assignedDriver: null, createdAt: DateTime.now()),
-      );
-      
-      
       // Find all customers in the specified areas that are assigned to this driver AND match the route days
-      final customersToUnassign = _customers.where((customer) => 
-        areas.any((area) => customer.area.trim().toLowerCase() == area.trim().toLowerCase()) &&
-        customer.assignedDriver == driverName &&
-        route.days.any((routeDay) => customer.daysAssigned.contains(routeDay))
-      ).toList();
+      // Use case-insensitive, trimmed comparison for driver names
+      final customersToUnassign = _customers.where((customer) {
+        // Check area match
+        final areaMatches = areas.any((area) => 
+          customer.area.trim().toLowerCase() == area.trim().toLowerCase()
+        );
+        if (!areaMatches) return false;
+        
+        // Check driver match (case-insensitive, trimmed)
+        final driverMatches = driverName != null && customer.assignedDriver != null
+          ? driverName.trim().toLowerCase() == customer.assignedDriver!.trim().toLowerCase()
+          : driverName == customer.assignedDriver; // Both null or both empty
+        if (!driverMatches) return false;
+        
+        // Check day match
+        final dayMatches = routeDays.any((routeDay) => customer.daysAssigned.contains(routeDay));
+        return dayMatches;
+      }).toList();
       
       
       int unassignedCount = 0;
@@ -2797,20 +2802,20 @@ class DashboardScreen extends StatelessWidget {
                           builder: (context, constraints) {
                             // Determine number of columns based on screen width
                             int crossAxisCount = 2;
-                            double childAspectRatio = 1.3;
+                            double childAspectRatio = 1.2;
                             
                             if (constraints.maxWidth < 600) {
-                              // Mobile: 2 columns
+                              // Mobile: 2 columns - more vertical space needed
                               crossAxisCount = 2;
-                              childAspectRatio = 1.35;
+                              childAspectRatio = 1.2;
                             } else if (constraints.maxWidth < 900) {
                               // Tablet: 2 columns
                               crossAxisCount = 2;
-                              childAspectRatio = 1.5;
+                              childAspectRatio = 1.3;
                             } else {
                               // Desktop: 4 columns
                               crossAxisCount = 4;
-                              childAspectRatio = 1.35;
+                              childAspectRatio = 1.2;
                             }
                             
                             final routesAssigned = appState.routes.length;
@@ -2967,60 +2972,74 @@ class DashboardScreen extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(10.0),
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Icon at the top
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(height: 8),
-            // Value - large and prominent
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-                fontFamily: 'Times New Roman',
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 3),
-            // Title
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Times New Roman',
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey[600],
-                  fontFamily: 'Times New Roman',
+            // Icon and Value row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Icon(icon, color: color, size: 14),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(width: 6),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        fontFamily: 'Times New Roman',
+                      ),
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Title and subtitle column
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Times New Roman',
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 7,
+                      color: Colors.grey[600],
+                      fontFamily: 'Times New Roman',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -5067,6 +5086,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
+  // Format last delivery date - always show proper date, not "Today 12:12"
+  String _formatLastDeliveryDate(DateTime date) {
+    final pakistanDate = PakistanTime.toPakistanTime(date);
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${pakistanDate.day} ${months[pakistanDate.month - 1]} ${pakistanDate.year}';
+  }
+
   // Build individual customer card
   Widget _buildCustomerCard(Customer customer, AppState appState) {
     return Card(
@@ -5159,7 +5188,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               const SizedBox(height: 4),
             ],
             Text(
-              'Last Delivery: ${DateGroupingUtils.formatDate(customer.lastDelivery)}',
+              'Last Delivery: ${_formatLastDeliveryDate(customer.lastDelivery)}',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -11569,6 +11598,15 @@ class RoutesScreen extends StatelessWidget {
       
       for (final customer in eligibleCustomers) {
         try {
+          // Update customer's assignedDriver field if it doesn't match
+          if (customer.assignedDriver == null || 
+              customer.assignedDriver!.trim().toLowerCase() != driverName.trim().toLowerCase()) {
+            await FirebaseService.updateCustomer(customer.id, {
+              'assignedDriver': driverName,
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+          }
+          
           bool createdAny = false;
           // Create auto orders only for intersecting days between route and customer
           for (String day in route.days) {
@@ -11730,11 +11768,51 @@ class RoutesScreen extends StatelessWidget {
     if (route == null) return;
     
     // Count customers that will be affected
-    final affectedCustomers = appState.customers.where((customer) => 
-      route.areas.any((area) => customer.area.trim().toLowerCase() == area.trim().toLowerCase()) &&
-      customer.assignedDriver == route.assignedDriver &&
-      route.days.any((routeDay) => customer.daysAssigned.contains(routeDay))
-    ).toList();
+    // Check customers that match area AND days AND (have matching assignedDriver OR have orders/auto-orders for this route)
+    final affectedCustomers = appState.customers.where((customer) {
+      // Check area match
+      final areaMatches = route.areas.any((area) => 
+        customer.area.trim().toLowerCase() == area.trim().toLowerCase()
+      );
+      if (!areaMatches) return false;
+      
+      // Check day match
+      final dayMatches = route.days.any((routeDay) => customer.daysAssigned.contains(routeDay));
+      if (!dayMatches) return false;
+      
+      // Check driver match (case-insensitive, trimmed)
+      final driverMatches = route.assignedDriver != null && customer.assignedDriver != null
+        ? route.assignedDriver!.trim().toLowerCase() == customer.assignedDriver!.trim().toLowerCase()
+        : route.assignedDriver == customer.assignedDriver; // Both null or both empty
+      
+      // If driver matches, this customer is affected
+      if (driverMatches) return true;
+      
+      // Also check if customer has orders or auto-orders for this route's driver and days
+      if (route.assignedDriver != null) {
+        final routeDriverLower = route.assignedDriver!.trim().toLowerCase();
+        
+        // Check if customer has orders assigned to this route's driver for matching days
+        final hasMatchingOrders = appState.orders.any((order) =>
+          order.customerId == customer.id &&
+          order.assignedDriver != null &&
+          order.assignedDriver!.trim().toLowerCase() == routeDriverLower
+        );
+        
+        // Check if customer has auto-orders assigned to this route's driver for matching days
+        final hasMatchingAutoOrders = appState.autoOrders.any((autoOrder) =>
+          autoOrder.customerId == customer.id &&
+          autoOrder.isActive &&
+          autoOrder.assignedDriver != null &&
+          autoOrder.assignedDriver!.trim().toLowerCase() == routeDriverLower &&
+          route.days.contains(autoOrder.dayOfWeek)
+        );
+        
+        if (hasMatchingOrders || hasMatchingAutoOrders) return true;
+      }
+      
+      return false;
+    }).toList();
     
     showDialog(
       context: context,
@@ -11766,11 +11844,21 @@ class RoutesScreen extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
                     ),
                     const SizedBox(height: 4),
-                    ...affectedCustomers.take(3).map((customer) => 
-                      Text('• ${customer.name} (${customer.area})')
+                    // Show all customers in a scrollable container
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: affectedCustomers.map((customer) => 
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text('• ${customer.name} (${customer.area})'),
+                            )
+                          ).toList(),
+                        ),
+                      ),
                     ),
-                    if (affectedCustomers.length > 3)
-                      Text('• ... and ${affectedCustomers.length - 3} more'),
                     const SizedBox(height: 4),
                     const Text(
                       'These customers will be unassigned from the driver and become available for reassignment.',

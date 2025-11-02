@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "395000107592",
+    "project_id": "water-management-app-da466",
+    "storage_bucket": "water-management-app-da466.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395000107592:android:b2d8e6b019f5bdfe65fe7d",
+        "android_client_info": {
+          "package_name": "com.example.untitled"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhhOxbqV1hYj1qJS17gx8TbPd3kh8qkTM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+

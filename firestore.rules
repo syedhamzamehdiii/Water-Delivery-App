@@ -1,0 +1,128 @@
+rules_version='2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read/write their own data
+    // Also allow admins to read other users (for employee management)
+    match /users/{userId} {
+      // Users (drivers/employees) can read/write their own profile (including when creating it)
+      // This allows new users to create their own profile document
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Admins can read users (drivers/employees) from their company (for employee list)
+      allow read: if request.auth != null && 
+                    request.auth.uid != userId &&
+                    exists(/databases/$(database)/documents/company_admins/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.role == 'admin' &&
+                    exists(/databases/$(database)/documents/users/$(userId)) &&
+                    get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.companyId == 
+                    get(/databases/$(database)/documents/users/$(userId)).data.companyId;
+      
+      // Admins can create/write users (drivers/employees) in their company (for employee creation)
+      allow create, update: if request.auth != null && 
+                              request.auth.uid != userId &&
+                              exists(/databases/$(database)/documents/company_admins/$(request.auth.uid)) &&
+                              get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.role == 'admin' &&
+                              request.resource.data.companyId == 
+                              get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.companyId;
+    }
+    
+    // Allow authenticated users to read/write company admin data
+    match /company_admins/{adminId} {
+      // Admin can read/write their own profile
+      allow read, write: if request.auth != null && request.auth.uid == adminId;
+      
+      // Admins can read other company admins from their company (for company management)
+      allow read: if request.auth != null &&
+                    request.auth.uid != adminId &&
+                    exists(/databases/$(database)/documents/company_admins/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.role == 'admin' &&
+                    get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.companyId == 
+                    get(/databases/$(database)/documents/company_admins/$(adminId)).data.companyId;
+    }
+    
+    // Allow authenticated users to create/read their own company document
+    // Company documents are created during registration
+    match /companies/{companyId} {
+      // Allow create for authenticated users (during registration)
+      allow create: if request.auth != null;
+      
+      // Allow read if user belongs to this company (check both company_admins and users)
+      allow read: if request.auth != null && (
+                    (exists(/databases/$(database)/documents/company_admins/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.companyId == companyId) ||
+                    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId)
+                  );
+      
+      // Allow update/delete only for company admin
+      allow update, delete: if request.auth != null &&
+                              exists(/databases/$(database)/documents/company_admins/$(request.auth.uid)) &&
+                              get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.companyId == companyId &&
+                              get(/databases/$(database)/documents/company_admins/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Allow authenticated users to read/write company-specific data
+    match /companies/{companyId}/{collection}/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow authenticated users to read/write global collections (for legacy support)
+    match /customers/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /orders/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /products/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /vendors/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /payments/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /routes/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /expenses/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /income/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /invoices/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /auto_orders/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /attendance/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /driver_loads/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /settings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Fallback rule for any other collections
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
